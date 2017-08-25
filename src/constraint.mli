@@ -1,20 +1,42 @@
 
-module Type : sig
-    type t =
-        | Var   of int
-        | Arrow of t * t
+module type OP = sig
+    type t
+    val eq : t -> t -> bool
 end
 
-type var
-type t
+module type VAR = sig
+    type t
+    val fresh : unit -> t
+    val eq : t -> t -> bool
+end
 
-val true_ : t
-val and_  : t -> t -> t
-val eq_   : Type.t -> Type.t -> t
-val ex_   : (Type.t -> t) -> t
-val def_  : Type.t -> (var -> t) -> t
-val let_  : (Type.t -> t) -> (var -> t) -> t
-val app_  : var -> Type.t -> t
+module Var : VAR
 
-type subst = (int * Type.t) list
-val solve : t -> ((subst * int list), string) result
+module type LANG = sig
+    module O : OP
+    module V : VAR
+
+    type t =
+        | Var of V.t
+        | App of O.t * t list
+end
+
+module MakeLang : functor (O : OP) ->
+      LANG with module O = O
+           with module V = Var
+
+module Make : functor (L : LANG) -> sig
+    type var
+    type t
+
+    val true_ : t
+    val and_  : t -> t -> t
+    val eq_   : L.t -> L.t -> t
+    val ex_   : (L.t -> t) -> t
+    val def_  : L.t -> (var -> t) -> t
+    val let_  : (L.t -> t) -> (var -> t) -> t
+    val app_  : var -> L.t -> t
+
+    type subst = (L.V.t * L.t) list
+    val solve : t -> ((subst * L.V.t list), string) result
+end
