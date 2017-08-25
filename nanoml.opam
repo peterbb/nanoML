@@ -1,0 +1,5 @@
+opam-version: "2.0"
+name: "nanoml"
+version: "0.1"
+maintainer: "post@peterbb.net"
+build: [[ "jbuilder" "build" "-p" name "-j" jobs]]
