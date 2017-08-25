@@ -16,3 +16,9 @@ An implementation of a minimalistic ML language.
     <expr0>   ::= <name>
                 | "(" <expr> ")"
 
+## Backend
+Currently the output of the compiler is a scheme program, which
+the user must either interpret or compile herself.
+The scheme-backend is just a temporary solution.
+
+

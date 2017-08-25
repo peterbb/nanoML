@@ -33,7 +33,12 @@ let main = function
     | [_; filename] ->
         let program = parse filename in
         Surface_syntax.dump program;
-        Type_check.type_check program
+        Type_check.type_check program;
+        let och = open_out (filename ^ ".s") in
+        let form = Format.formatter_of_out_channel och in
+        Backend.compile form program;
+        close_out och;
+        Printf.printf "done.\n"
     | _ -> usage "nanoml"
 
 let () = Sys.argv |> Array.to_list |> main
