@@ -1,22 +1,29 @@
+open Printf
+
+type tyvar = int
+
+type var = int
 
 module Type = struct
     type t =
-        | Var   of int
+        | Var   of tyvar
         | Arrow of t * t
+
+    let rec show ch = function
+        | Var x ->
+            fprintf ch "a%d" x
+        | Arrow (Var x, t) ->
+            fprintf ch "a%d -> %a" x show t
+        | Arrow (t0, t1) ->
+            fprintf ch "(%a) -> %a" show t0 show t1
+
+    let fresh = 
+        let k = ref 0 in
+        fun () ->
+            let i = !k in
+            k := i + 1;
+            i
 end
-
-let rec type_to_string = function
-    | Type.Var x ->
-        Printf.sprintf "%d" x
-    | Type.Arrow (t0, t1) ->
-        Printf.sprintf "(%s -> %s)" (type_to_string t0) (type_to_string t1)
-
-let fresh_tyvar = 
-    let k = ref 0 in
-    fun () ->
-        let i = !k in
-        k := i + 1;
-        i
 
 let fresh_tmvar = 
     let k = ref 0 in
@@ -25,48 +32,38 @@ let fresh_tmvar =
         k := i + 1;
         i
 
-type t = 
-    | True
-    | Eq    of Type.t * Type.t
-    | And   of t * t
-    | Ex    of int * t
-    | Let   of int * int * t * t
-    | App   of int * Type.t
+module C = struct
+    type t = 
+        | True
+        | Eq    of Type.t * Type.t
+        | And   of t * t
+        | Ex    of int * t
+        | Let   of int * int * t * t
+        | App   of int * Type.t
 
-let let1 c0 c1 =
-    let x = fresh_tmvar () in
-    let a = fresh_tyvar () in
-    Let (x, a, c0 (Type.Var a), c1 x)
+    let true_ = True
 
-let def a f =
-    let1 (fun b -> Eq (a, b)) f
+    let and_ c0 c1 = And (c0, c1)
 
-let ex f =
-    let a = fresh_tyvar () in
-    Ex (a, f (Type.Var a))
+    let eq_ t0 t1 = Eq (t0, t1)
 
-let rec dump_type =
-    let pf = Printf.printf in
-    function
-    | Type.Var a ->
-        pf "'%d" a
-    | Type.Arrow (t0, t1) ->
-        pf "("; dump_type t0; pf " -> "; dump_type t1; pf ")"
+    let ex_ f =
+        let a = Type.fresh () in
+        Ex (a, f (Type.Var a))
 
-let rec dump =
-    let pf = Printf.printf in
-    function
-    | True -> pf "true"
-    | Eq (t0, t1) ->
-        pf "("; dump_type t0; pf " = "; dump_type t1; pf ")"
-    | And (c0, c1) ->
-        pf "("; dump c0; pf " & "; dump c1; pf ")"
-    | Ex (a, c) ->
-        pf "(ex '%d " a; dump c; pf ")"
-    | Let (x, a, c0, c1) ->
-        pf "(let %d = ('%d. " x a; dump c0; pf ") in "; dump c1; pf ")"
-    | App (x, t) ->
-        pf "(%d " x; dump_type t; pf ")"
+    let let_ c0 c1 =
+        let x = fresh_tmvar () in
+        let a = Type.fresh () in
+        Let (x, a, c0 (Type.Var a), c1 x)
+
+    let def_ a f =
+        let_ (fun b -> Eq (a, b)) f
+
+    let app_ x t = App (x, t)
+end
+
+include C
+
 
 (* Normal form *)
 module Normal_form = struct
@@ -108,39 +105,7 @@ module Normal_form = struct
 
     let rec pw = function
         | n when n <= 0 -> ()
-        | n -> Printf.printf " "; pw (n - 1)
-
-    let dump =
-        let spf = Printf.sprintf in
-        let pf = Printf.printf in
-        let rec dump n { exs; lets; eqs; apps; } =
-            (if exs <> [] then begin
-                pw n;
-                pf "ex %s.\n" (String.concat " "(List.map (spf "%d") exs))
-            end);
-            (if lets <> [] then begin
-                pw n; pf "lets \n";
-                List.iter (fun (x, a, c) ->
-                            pw (n + 2); pf "%d = %d.\n" x a;
-                            dump (n + 4) c)
-                        lets
-            end);
-            (if eqs <> [] then begin
-                pw n; pf "eqs:\n";
-                List.iter (fun (t0, t1) ->
-                            let t0 = type_to_string t0 in
-                            let t1 = type_to_string t1 in
-                            pw (n + 2); pf "%s = %s\n" t0 t1)
-                    eqs
-            end);
-            (if apps <> [] then begin
-                List.iter (fun (x, t) ->
-                            let t = type_to_string t in
-                            pw (n + 2); pf "%d @ %s\n" x t)
-                    apps
-            end)
-        in
-        dump 0
+        | n -> printf " "; pw (n - 1)
 
     let rec sub_ty ty a = function
         | Type.Var b when a = b -> ty
@@ -210,12 +175,6 @@ module Normal_form2 = struct
         | N1.{ lets =[]; apps = (x, _) :: _ } ->
             failwith "constraint contains free variable"
 
-    let dump {exs; eqs; } =
-        let open Printf in
-        printf "ex %s\n" (List.map (sprintf "%d") exs |> String.concat " ");
-        List.iter (fun (t0, t1) ->
-                    printf "%s = %s\n" (type_to_string t0) (type_to_string t1))
-            eqs
 
     open Type
     let rec simplify = function
@@ -258,8 +217,6 @@ module Normal_form2 = struct
             | None -> None
             end
             
-    open Printf
-        
     let solve c =
         let rec sub t x = function
             | Var y when x = y -> t
@@ -267,30 +224,13 @@ module Normal_form2 = struct
             | Arrow (t0, t1) -> Arrow (sub t x t0, sub t x t1)
         in
         let rec loop map exs eqs =
-            printf "------- debug --------\n";
-            printf "map:\n";
-            List.iter (fun (x, t) ->
-                printf "\t%d = %s\n" x (type_to_string t))
-                map;
-            printf "exs:";
-            List.iter (printf " %d") exs;
-            printf "\n";
-            printf "eqs:\n";
-            List.iter (fun (t0, t1) ->
-                    printf "\t%s = %s\n" (type_to_string t0)(type_to_string t1))
-                eqs;
             match simp_all eqs with
             | None -> Error "error simplifying"
             | Some [] -> Ok (map, exs)
             | Some xs ->
                 begin match find_noncyclic exs xs with
                 | None ->
-                    let f (t0, t1) = sprintf "\t%s = %s"
-                        (type_to_string t0) (type_to_string t1)
-                    in
-                    Error (sprintf "only cycles.\n exs: %s\neqs:%s\n"
-                            (List.map (sprintf "%d") exs |> String.concat " ")
-                            (List.map f xs |> String.concat "\n"))
+                    Error "cycle"
                 | Some (x, t, eqs) ->
                     let exs = List.filter (fun y -> x <> y) exs in
 
@@ -306,10 +246,10 @@ module Normal_form2 = struct
         
 end
 
-open Printf
+type subst = (int * Type.t) list
 
 let solve c =
-    let cn = Normal_form.import c in
-    let cn = Normal_form2.import cn in
-    Normal_form2.solve cn
+    Normal_form.import c
+    |> Normal_form2.import
+    |> Normal_form2.solve
 

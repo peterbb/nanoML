@@ -6,20 +6,20 @@ let rec gen_term ctx term typ =
     match term with
 
     | Var x ->
-        C.App (List.assoc x ctx, typ)
+        C.app_ (List.assoc x ctx) typ
 
     | App (t0, t1) ->
-        C.ex (fun a ->
-            (C.And (gen_term ctx t0 (C.Type.Arrow (a, typ)),
-                    gen_term ctx t1 a)))
+        C.ex_ (fun a ->
+              (C.and_ (gen_term ctx t0 (C.Type.Arrow (a, typ)))
+                      (gen_term ctx t1 a)))
     | Fun (name, t) ->
-        C.ex (fun a ->
-        C.ex (fun b ->
-            C.And (C.Eq (typ, (C.Type.Arrow (a, b))),
-                   C.def a (fun x -> gen_term ((name, x) :: ctx) t b))
+        C.ex_ (fun a ->
+        C.ex_ (fun b ->
+            C.and_ (C.eq_ typ (C.Type.Arrow (a, b)))
+                   (C.def_ a (fun x -> gen_term ((name, x) :: ctx) t b))
         ))
     | Let (name, t0, t1) ->
-        C.let1 (fun a -> gen_term ctx t0 a)
+        C.let_ (fun a -> gen_term ctx t0 a)
                (fun x -> gen_term ((name, x) :: ctx) t1 typ)
 
 
@@ -70,9 +70,9 @@ let to_string t =
     
 
 let rec gen_program ctx = function
-    | [] -> C.True
+    | [] -> C.true_
     | (name, term) :: rest ->
-        C.let1 (fun a ->
+        C.let_ (fun a ->
                     id_tyvar_map := (name, a) :: !id_tyvar_map;
                     gen_term ctx term a) 
                (fun x ->
