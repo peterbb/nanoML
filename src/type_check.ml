@@ -1,3 +1,4 @@
+open Printf
 
 module C = Constraint
 
@@ -24,7 +25,6 @@ let rec gen_term ctx term typ =
 
 
 let id_tyvar_map = ref []
-open Printf 
 
 let to_string t =
     let open C.Type in
@@ -80,7 +80,6 @@ let rec gen_program ctx = function
         
 
 
-open Printf
 
 let type_check program =
     let c = gen_program [] program in
